@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#07111f" />
+  <title>AR กระสุนวงจักรพิชิตมาตราตัวสะกด</title>
+
+  <!-- UI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+  <!-- MediaPipe Hands + Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+
+  <!-- Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <style>
+    :root {
+      --cyan: #00f0ff;
+      --gold: #facc15;
+      --ink: #07111f;
+      --cream: #f8fafc;
+      --danger: #f43f5e;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #020617; }
+    body { font-family: "Prompt", sans-serif; color: white; user-select: none; }
+    button, input { font-family: "Kanit", sans-serif; }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(0,240,255,.12), transparent 26%),
+        linear-gradient(180deg, #0f172a 0%, #020617 100%);
+    }
+
+    #outputCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    #inputVideo {
+      position: fixed;
+      width: 2px;
+      height: 2px;
+      opacity: 0.001;
+      pointer-events: none;
+      left: -10px;
+      top: -10px;
+    }
+
+    .glass {
+      background: linear-gradient(180deg, rgba(15,23,42,.84), rgba(2,6,23,.72));
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow: 0 10px 34px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .hud-pill {
+      min-width: 108px;
+      border-radius: 20px;
+      padding: 9px 13px;
+    }
+
+    .mission-card {
+      border-radius: 24px;
+      box-shadow: 0 10px 40px rgba(0,240,255,.10), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+
+    .modal-backdrop {
+      background: radial-gradient(circle at center, rgba(8,47,73,.38), rgba(2,6,23,.93));
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .modal-panel {
+      background:
+        radial-gradient(circle at 50% 0%, rgba(0,240,255,.12), transparent 34%),
+        linear-gradient(160deg, rgba(15,23,42,.98), rgba(2,6,23,.98));
+      border: 1px solid rgba(103,232,249,.22);
+      box-shadow: 0 24px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+
+    .ninja-mark {
+      width: 78px;
+      height: 78px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto;
+      color: #cffafe;
+      background:
+        radial-gradient(circle, rgba(255,255,255,.22), transparent 35%),
+        linear-gradient(145deg, #0ea5e9, #155e75 52%, #083344);
+      border: 2px solid rgba(103,232,249,.52);
+      box-shadow: 0 0 36px rgba(0,240,255,.28), inset 0 6px 18px rgba(255,255,255,.15);
+    }
+
+    .instruction-chip {
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.055);
+      border-radius: 18px;
+    }
+
+    .primary-btn {
+      background: linear-gradient(180deg, #22d3ee, #0891b2);
+      color: #042f2e;
+      box-shadow: 0 11px 28px rgba(6,182,212,.28), inset 0 1px 0 rgba(255,255,255,.55);
+      border: 1px solid rgba(207,250,254,.58);
+    }
+    .primary-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .primary-btn:active { transform: translateY(1px) scale(.995); }
+    .primary-btn:disabled { opacity: .58; cursor: progress; transform: none; }
+
+    .secondary-btn {
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.14);
+    }
+    .secondary-btn:hover { background: rgba(255,255,255,.11); }
+
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 14px rgba(34,197,94,.85);
+      animation: pulseDot 1.4s ease-in-out infinite;
+    }
+    @keyframes pulseDot { 50% { opacity: .35; transform: scale(.78); } }
+
+    .star-pop { animation: starPop .55s cubic-bezier(.2,.9,.3,1.3) both; }
+    @keyframes starPop { from { transform: scale(.2) rotate(-20deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+
+    .tiny-scroll::-webkit-scrollbar { width: 7px; }
+    .tiny-scroll::-webkit-scrollbar-thumb { background: rgba(103,232,249,.22); border-radius: 99px; }
+
+    @media (max-width: 720px) {
+      .hud-pill { min-width: 88px; padding: 7px 9px; }
+      #missionWrap { max-width: calc(100vw - 24px); }
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" aria-label="เกม AR มาตราตัวสะกด">
+    <video id="inputVideo" autoplay playsinline muted></video>
+    <canvas id="outputCanvas"></canvas>
+
+    <!-- HUD -->
+    <section id="hud" class="absolute inset-x-0 top-0 z-20 p-3 md:p-4 pointer-events-none hidden">
+      <div class="flex items-start justify-between gap-2">
+        <div class="glass hud-pill">
+          <div class="text-[10px] md:text-xs text-cyan-200/80">คะแนน</div>
+          <div class="font-[Kanit] font-extrabold text-xl md:text-2xl leading-none"><span id="scoreValue">0</span></div>
+        </div>
+
+        <div id="missionWrap" class="glass mission-card px-4 py-2.5 md:px-6 md:py-3 text-center max-w-[58vw]">
+          <div class="text-[10px] md:text-xs tracking-wider text-cyan-200/75 font-semibold">ภารกิจนินจา</div>
+          <div id="missionTitle" class="font-[Kanit] text-base md:text-xl font-extrabold leading-tight text-white">แม่กง</div>
+          <div id="missionHint" class="text-[10px] md:text-xs text-slate-300 leading-tight mt-0.5">สะกดด้วย ง</div>
+          <div class="mt-2 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div id="missionProgress" class="h-full rounded-full bg-cyan-300 transition-all duration-300" style="width:0%"></div>
+          </div>
+          <div id="missionCount" class="text-[10px] mt-1 text-slate-300">0 / 8 คำ</div>
+        </div>
+
+        <div class="glass hud-pill text-right">
+          <div class="text-[10px] md:text-xs text-amber-200/80">คอมโบ</div>
+          <div class="font-[Kanit] font-extrabold text-xl md:text-2xl leading-none text-amber-300">x<span id="comboValue">0</span></div>
+        </div>
+      </div>
+
+      <div class="mt-2 flex justify-between items-center gap-2">
+        <div class="glass rounded-full px-3 py-1.5 text-[10px] md:text-xs flex items-center gap-2">
+          <span id="cameraDot" class="pulse-dot"></span>
+          <span id="statusText">กำลังเตรียมกล้อง...</span>
+        </div>
+        <div class="flex gap-2 pointer-events-auto">
+          <button id="soundBtn" class="glass w-10 h-10 rounded-full" title="เปิด/ปิดเสียง"><i class="fa-solid fa-volume-high"></i></button>
+          <button id="pauseBtn" class="glass w-10 h-10 rounded-full" title="หยุดชั่วคราว"><i class="fa-solid fa-pause"></i></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Start Modal -->
+    <section id="startModal" class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="modal-panel w-full max-w-2xl rounded-[32px] p-5 md:p-8 max-h-[94vh] overflow-y-auto tiny-scroll">
+        <div class="ninja-mark"><i class="fa-solid fa-fan text-4xl"></i></div>
+        <div class="text-center mt-4">
+          <div class="text-cyan-300 text-xs md:text-sm font-semibold tracking-widest">เกมภาษาไทย ป.3 • AR HAND TRACKING</div>
+          <h1 class="font-[Kanit] font-extrabold text-2xl md:text-4xl mt-1 leading-tight">AR กระสุนวงจักร<br><span class="text-cyan-300">พิชิตมาตราตัวสะกด</span></h1>
+          <p class="text-slate-300 text-sm md:text-base mt-3">อ่านคำบนการ์ดให้ดี แล้วใช้พลังจากฝ่ามือทำลายเฉพาะคำที่อยู่ในมาตราเป้าหมาย</p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-2.5 mt-5">
+          <div class="instruction-chip p-3.5 text-center">
+            <div class="text-cyan-300 text-2xl"><i class="fa-solid fa-hand"></i></div>
+            <div class="font-[Kanit] font-bold mt-1">1. หงายฝ่ามือ</div>
+            <div class="text-xs text-slate-400">กางมือให้กล้องเห็นชัด</div>
+          </div>
+          <div class="instruction-chip p-3.5 text-center">
+            <div class="text-cyan-300 text-2xl"><i class="fa-solid fa-crosshairs"></i></div>
+            <div class="font-[Kanit] font-bold mt-1">2. เล็งคำศัพท์</div>
+            <div class="text-xs text-slate-400">พาลูกพลังไปทับการ์ด</div>
+          </div>
+          <div class="instruction-chip p-3.5 text-center">
+            <div class="text-amber-300 text-2xl"><i class="fa-solid fa-burst"></i></div>
+            <div class="font-[Kanit] font-bold mt-1">3. ชาร์จ 1 วินาที</div>
+            <div class="text-xs text-slate-400">ค้างเป้าไว้จนพลังเต็ม</div>
+          </div>
+        </div>
+
+        <div id="cameraHelp" class="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-300/5 px-4 py-3 text-xs md:text-sm text-slate-300">
+          <div class="flex gap-2 items-start">
+            <i class="fa-solid fa-circle-info text-cyan-300 mt-0.5"></i>
+            <div><b class="text-white">สิทธิ์กล้อง:</b> เมื่อกดเปิดกล้อง ให้เลือก “อนุญาต” หากเบราว์เซอร์บล็อกกล้อง แนะนำเปิดไฟล์ผ่าน <b>HTTPS</b> หรือ <b>localhost</b></div>
+          </div>
+        </div>
+
+        <div id="startError" class="hidden mt-3 rounded-2xl border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"></div>
+
+        <button id="startBtn" class="primary-btn w-full mt-5 rounded-2xl py-3.5 md:py-4 font-[Kanit] font-extrabold text-lg transition-all">
+          <i class="fa-solid fa-camera mr-2"></i> เปิดกล้องและเริ่มภารกิจ
+        </button>
+        <button id="mouseDemoBtn" class="secondary-btn w-full mt-2 rounded-2xl py-2.5 text-sm text-slate-200">
+          <i class="fa-solid fa-computer-mouse mr-2"></i> โหมดทดลองด้วยเมาส์ (ไม่ใช้กล้อง)
+        </button>
+        <div class="text-center text-[10px] text-slate-500 mt-3">ไม่มีการอัปโหลดภาพจากกล้อง ภาพถูกประมวลผลภายในเบราว์เซอร์</div>
+      </div>
+    </section>
+
+    <!-- Pause Modal -->
+    <section id="pauseModal" class="modal-backdrop fixed inset-0 z-40 hidden items-center justify-center p-4">
+      <div class="modal-panel w-full max-w-sm rounded-[28px] p-6 text-center">
+        <div class="text-cyan-300 text-4xl"><i class="fa-solid fa-pause"></i></div>
+        <h2 class="font-[Kanit] font-extrabold text-2xl mt-3">พักภารกิจ</h2>
+        <p class="text-sm text-slate-400 mt-1">เกมหยุดชั่วคราว คะแนนยังอยู่ครบ</p>
+        <button id="resumeBtn" class="primary-btn w-full rounded-2xl py-3 mt-5 font-bold">เล่นต่อ</button>
+        <button id="restartFromPauseBtn" class="secondary-btn w-full rounded-2xl py-3 mt-2 text-sm">สุ่มภารกิจใหม่</button>
+      </div>
+    </section>
+
+    <!-- Victory Modal -->
+    <section id="victoryModal" class="modal-backdrop fixed inset-0 z-50 hidden items-center justify-center p-4">
+      <div class="modal-panel w-full max-w-lg rounded-[32px] p-6 md:p-8 text-center">
+        <div class="text-amber-300 flex justify-center gap-2 text-5xl">
+          <i class="fa-solid fa-star star-pop"></i>
+          <i class="fa-solid fa-star star-pop" style="animation-delay:.12s"></i>
+          <i class="fa-solid fa-star star-pop" style="animation-delay:.24s"></i>
+        </div>
+        <div class="text-cyan-300 text-xs tracking-[.28em] mt-4">MISSION COMPLETE</div>
+        <h2 id="victoryTitle" class="font-[Kanit] font-extrabold text-3xl md:text-4xl mt-1">พิชิตแม่กงสำเร็จ!</h2>
+        <p class="text-slate-300 mt-2">เก็บคำที่ถูกต้องครบทั้ง 8 คำแล้ว</p>
+
+        <div class="grid grid-cols-2 gap-3 mt-5">
+          <div class="instruction-chip p-4">
+            <div class="text-xs text-slate-400">คะแนนรวม</div>
+            <div id="finalScore" class="font-[Kanit] text-3xl font-extrabold text-cyan-300">0</div>
+          </div>
+          <div class="instruction-chip p-4">
+            <div class="text-xs text-slate-400">คอมโบสูงสุด</div>
+            <div class="font-[Kanit] text-3xl font-extrabold text-amber-300">x<span id="bestCombo">0</span></div>
+          </div>
+        </div>
+
+        <button id="playAgainBtn" class="primary-btn w-full rounded-2xl py-3.5 mt-5 font-[Kanit] font-extrabold text-lg">
+          <i class="fa-solid fa-rotate-right mr-2"></i> สุ่มภารกิจใหม่
+        </button>
+      </div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+
+  // ============================================================
+  // 1) DATABASE — ทุกการ์ดใช้หน้าตาเดียวกัน ไม่มีสีบอกคำตอบ
+  // ============================================================
+  const CATEGORIES = {
+    'แม่กง': {
+      hint: 'สะกดด้วย ง',
+      words: ['ลิง', 'ช้าง', 'กลอง', 'ทอง', 'รัง', 'กุ้ง', 'แมลง', 'ผึ้ง']
+    },
+    'แม่กน': {
+      hint: 'สะกดด้วย น ณ ญ ร ล ฬ',
+      words: ['กิน', 'บ้าน', 'จาน', 'วาฬ', 'อาหาร', 'พยาบาล', 'การ์ตูน', 'เหรียญ']
+    },
+    'แม่กม': {
+      hint: 'สะกดด้วย ม',
+      words: ['ลม', 'ส้ม', 'ยิ้ม', 'ร่ม', 'โคม', 'กระเทียม', 'สนาม', 'ไอศกรีม']
+    },
+    'แม่เกย': {
+      hint: 'สะกดด้วย ย',
+      words: ['สวย', 'ยาย', 'ควาย', 'กล้วย', 'มวย', 'ถ้วย', 'หอย', 'กระต่าย']
+    },
+    'แม่เกอว': {
+      hint: 'สะกดด้วย ว',
+      words: ['ดาว', 'แมว', 'ข้าว', 'แก้ว', 'นิ้ว', 'สาว', 'ไข่ดาว', 'มะพร้าว']
+    },
+    'แม่กก': {
+      hint: 'สะกดด้วย ก ข ค ฆ',
+      words: ['นก', 'ปาก', 'รัก', 'เมฆ', 'เลข', 'สุนัข', 'วิหค', 'หมวก']
+    },
+    'แม่กด': {
+      hint: 'สะกดด้วย ด จ ช ซ ฎ ฏ ฐ ฑ ฒ ต ถ ท ธ ศ ษ ส',
+      words: ['มด', 'รถ', 'ปิด', 'สมุด', 'แก๊ส', 'พญาครุฑ', 'อูฐ', 'ตำรวจ']
+    },
+    'แม่กบ': {
+      hint: 'สะกดด้วย บ ป พ ฟ ภ',
+      words: ['กบ', 'รูป', 'ภาพ', 'ยีราฟ', 'กรอบ', 'ทัพ', 'เคารพ', 'ตะเกียบ']
+    }
+  };
+
+  const CATEGORY_NAMES = Object.keys(CATEGORIES);
+
+  // ============================================================
+  // 2) DOM / CANVAS
+  // ============================================================
+  const video = document.getElementById('inputVideo');
+  const canvas = document.getElementById('outputCanvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const hud = document.getElementById('hud');
+  const startModal = document.getElementById('startModal');
+  const pauseModal = document.getElementById('pauseModal');
+  const victoryModal = document.getElementById('victoryModal');
+  const startBtn = document.getElementById('startBtn');
+  const mouseDemoBtn = document.getElementById('mouseDemoBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const playAgainBtn = document.getElementById('playAgainBtn');
+  const restartFromPauseBtn = document.getElementById('restartFromPauseBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const startError = document.getElementById('startError');
+  const scoreValue = document.getElementById('scoreValue');
+  const comboValue = document.getElementById('comboValue');
+  const missionTitle = document.getElementById('missionTitle');
+  const missionHint = document.getElementById('missionHint');
+  const missionProgress = document.getElementById('missionProgress');
+  const missionCount = document.getElementById('missionCount');
+  const statusText = document.getElementById('statusText');
+  const cameraDot = document.getElementById('cameraDot');
+  const victoryTitle = document.getElementById('victoryTitle');
+  const finalScore = document.getElementById('finalScore');
+  const bestCombo = document.getElementById('bestCombo');
+
+  let W = innerWidth, H = innerHeight, DPR = 1;
+
+  // ============================================================
+  // 3) GAME STATE
+  // ============================================================
+  let targetCategory = null;
+  let cards = [];
+  let particles = [];
+  let floatTexts = [];
+  let score = 0;
+  let combo = 0;
+  let maxCombo = 0;
+  let destroyedCorrect = new Set();
+  let gameRunning = false;
+  let paused = false;
+  let victory = false;
+  let lastFrame = performance.now();
+  let lastSpawnAt = 0;
+  let spawnSeq = 0;
+  let currentLockId = null;
+  let lockStartedAt = 0;
+  let chargeProgress = 0;
+  let camera = null; // MediaStream
+  let hands = null;
+  let cameraLoopToken = 0;
+  let handsFrameBusy = false;
+  let cameraReady = false;
+  let handsReady = false;
+  let mouseMode = false;
+  let soundEnabled = true;
+  let handState = { visible: false, open: false, landmarks: null, palm: null };
+  let mouse = { x: W/2, y: H/2, active: false };
+
+  const CARD_BASE_W = 182;
+  const CARD_H = 84;
+  const LOCK_MS = 1000;
+  const SPHERE_RADIUS = 50;
+  const CARD_TARGET_COUNT = 5;
+
+  // ============================================================
+  // 4) HELPERS
+  // ============================================================
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const choice = arr => arr[Math.floor(Math.random() * arr.length)];
+  const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+  function roundedRectPath(c, x, y, w, h, r) {
+    const rr = Math.min(r, w/2, h/2);
+    c.beginPath();
+    c.moveTo(x + rr, y);
+    c.arcTo(x+w, y, x+w, y+h, rr);
+    c.arcTo(x+w, y+h, x, y+h, rr);
+    c.arcTo(x, y+h, x, y, rr);
+    c.arcTo(x, y, x+w, y, rr);
+    c.closePath();
+  }
+
+  function resizeCanvas() {
+    W = innerWidth; H = innerHeight;
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    mouse.x = clamp(mouse.x, 0, W);
+    mouse.y = clamp(mouse.y, 0, H);
+  }
+  resizeCanvas();
+  addEventListener('resize', resizeCanvas);
+
+  function setStatus(text, ok = true) {
+    statusText.textContent = text;
+    cameraDot.style.background = ok ? '#22c55e' : '#f59e0b';
+    cameraDot.style.boxShadow = ok ? '0 0 14px rgba(34,197,94,.85)' : '0 0 14px rgba(245,158,11,.85)';
+  }
+
+  function showStartError(message) {
+    startError.textContent = message;
+    startError.classList.remove('hidden');
+  }
+
+  function clearStartError() {
+    startError.textContent = '';
+    startError.classList.add('hidden');
+  }
+
+  function updateHud() {
+    scoreValue.textContent = score.toLocaleString('th-TH');
+    comboValue.textContent = combo;
+    missionTitle.textContent = targetCategory || '—';
+    missionHint.textContent = targetCategory ? CATEGORIES[targetCategory].hint : '';
+    missionProgress.style.width = `${(destroyedCorrect.size / 8) * 100}%`;
+    missionCount.textContent = `${destroyedCorrect.size} / 8 คำ`;
+  }
+
+  // ============================================================
+  // 5) WEB AUDIO SYNTH
+  // ============================================================
+  let audioCtx = null;
+  let chargeOsc = null;
+  let chargeGain = null;
+
+  function ensureAudio() {
+    if (!soundEnabled) return null;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(freq, duration=.12, type='sine', gain=.08, endFreq=null) {
+    const ac = ensureAudio();
+    if (!ac) return;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, ac.currentTime);
+    if (endFreq) o.frequency.exponentialRampToValueAtTime(Math.max(30,endFreq), ac.currentTime + duration);
+    g.gain.setValueAtTime(gain, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    o.connect(g).connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + duration);
+  }
+
+  function noiseBurst(duration=.18, gain=.08) {
+    const ac = ensureAudio();
+    if (!ac) return;
+    const len = Math.floor(ac.sampleRate * duration);
+    const buffer = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<len;i++) data[i] = (Math.random()*2-1) * (1-i/len);
+    const src = ac.createBufferSource();
+    const g = ac.createGain();
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass'; filter.frequency.value = 900;
+    g.gain.value = gain;
+    src.buffer = buffer;
+    src.connect(filter).connect(g).connect(ac.destination);
+    src.start();
+  }
+
+  function startChargeSound() {
+    if (chargeOsc || !soundEnabled) return;
+    const ac = ensureAudio();
+    if (!ac) return;
+    chargeOsc = ac.createOscillator();
+    chargeGain = ac.createGain();
+    chargeOsc.type = 'sawtooth';
+    chargeOsc.frequency.value = 150;
+    chargeGain.gain.value = 0.018;
+    chargeOsc.connect(chargeGain).connect(ac.destination);
+    chargeOsc.start();
+  }
+
+  function updateChargeSound(p) {
+    if (!chargeOsc || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    chargeOsc.frequency.cancelScheduledValues(now);
+    chargeOsc.frequency.linearRampToValueAtTime(150 + 620*p, now + .04);
+    chargeGain.gain.linearRampToValueAtTime(.018 + .035*p, now + .04);
+  }
+
+  function stopChargeSound() {
+    if (!chargeOsc) return;
+    try { chargeGain.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + .05); chargeOsc.stop(audioCtx.currentTime + .06); } catch(_) {}
+    chargeOsc = null; chargeGain = null;
+  }
+
+  function soundCorrect() { tone(170,.12,'sawtooth',.08,620); setTimeout(()=>tone(720,.11,'sine',.07,1080),60); noiseBurst(.13,.05); }
+  function soundWrong() { tone(180,.22,'square',.06,80); }
+  function soundWin() { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.28,'sine',.09,f*1.02),i*110)); }
+
+  soundBtn.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    soundBtn.innerHTML = soundEnabled ? '<i class="fa-solid fa-volume-high"></i>' : '<i class="fa-solid fa-volume-xmark"></i>';
+    if (!soundEnabled) stopChargeSound();
+  });
+
+  // ============================================================
+  // 6) MEDIAPIPE HANDS
+  // ============================================================
+  function normalizeLandmarks(raw) {
+    // Canvas is mirrored, so x must be mirrored too.
+    return raw.map(p => ({ x: (1 - p.x) * W, y: p.y * H, z: p.z || 0 }));
+  }
+
+  function isPalmOpen(lm) {
+    if (!lm || lm.length < 21) return false;
+    const wrist = lm[0];
+    const tips = [4,8,12,16,20].map(i => lm[i]);
+    const mcps = [2,5,9,13,17].map(i => lm[i]);
+    let extended = 0;
+    for (let i=0;i<5;i++) {
+      if (dist(tips[i], wrist) > dist(mcps[i], wrist) * 1.28) extended++;
+    }
+    const palmWidth = dist(lm[5], lm[17]);
+    const spread = dist(lm[8], lm[20]);
+    return extended >= 4 && spread > palmWidth * 1.05;
+  }
+
+  function calcPalm(lm) {
+    // ตามสเปก: (Wrist + Index MCP + Pinky MCP) / 3
+    return {
+      x: (lm[0].x + lm[5].x + lm[17].x) / 3,
+      y: (lm[0].y + lm[5].y + lm[17].y) / 3
+    };
+  }
+
+  function onResults(results) {
+    const raw = results.multiHandLandmarks?.[0];
+    if (!raw) {
+      handState = { visible: false, open: false, landmarks: null, palm: null };
+      if (!mouseMode && gameRunning && !paused) setStatus('ยกฝ่ามือเข้ากล้อง', false);
+      return;
+    }
+    const lm = normalizeLandmarks(raw);
+    const open = isPalmOpen(lm);
+    handState = { visible: true, open, landmarks: lm, palm: calcPalm(lm) };
+    if (!mouseMode && gameRunning && !paused) setStatus(open ? 'ตรวจพบฝ่ามือ • พร้อมปล่อยพลัง!' : 'กางฝ่ามือให้ชัดขึ้น', open);
+  }
+
+  async function initMediaPipe() {
+    if (hands) return;
+    if (typeof Hands === 'undefined') throw new Error('โหลด MediaPipe Hands ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+    hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.58,
+      minTrackingConfidence: 0.55,
+    });
+    hands.onResults(onResults);
+    handsReady = true;
+  }
+
+  function stopCameraStream() {
+    cameraLoopToken++;
+    handsFrameBusy = false;
+    if (camera) {
+      try { camera.getTracks().forEach(track => track.stop()); } catch (_) {}
+      camera = null;
+    }
+    try { video.pause(); } catch (_) {}
+    video.srcObject = null;
+    cameraReady = false;
+  }
+
+  function waitForVideoReady(timeoutMs = 8000) {
+    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (ok, err) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        video.removeEventListener('loadedmetadata', onReady);
+        video.removeEventListener('canplay', onReady);
+        ok ? resolve() : reject(err);
+      };
+      const onReady = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0) finish(true);
+      };
+      const timer = setTimeout(() => finish(false, new Error('กล้องเปิดแล้ว แต่ไม่ได้รับภาพจากกล้องภายในเวลาที่กำหนด')), timeoutMs);
+      video.addEventListener('loadedmetadata', onReady);
+      video.addEventListener('canplay', onReady);
+    });
+  }
+
+  async function openCameraStream() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('เบราว์เซอร์นี้ไม่รองรับการเปิดกล้องผ่านเว็บ กรุณาใช้ Chrome หรือ Edge รุ่นใหม่');
+    }
+
+    const preferred = {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(preferred);
+    } catch (err) {
+      // บางเว็บแคมไม่ยอมรับ constraints แบบ ideal จึงลองแบบพื้นฐานอีกครั้ง
+      if (err?.name === 'OverconstrainedError' || err?.name === 'ConstraintNotSatisfiedError') {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } else {
+        throw err;
+      }
+    }
+
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play();
+    await waitForVideoReady();
+    return stream;
+  }
+
+  function startHandsProcessingLoop() {
+    const token = ++cameraLoopToken;
+    const tick = async () => {
+      if (token !== cameraLoopToken || !cameraReady || mouseMode || !camera) return;
+
+      if (!paused && !victory && hands && !handsFrameBusy && video.readyState >= 2) {
+        handsFrameBusy = true;
+        try {
+          await hands.send({ image: video });
+        } catch (e) {
+          console.warn('MediaPipe Hands frame skipped:', e);
+        } finally {
+          handsFrameBusy = false;
+        }
+      }
+      if (token === cameraLoopToken) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  async function startCamera() {
+    clearStartError();
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังเปิดกล้อง...';
+
+    try {
+      // สำคัญ: เปิด getUserMedia เพียงครั้งเดียว ไม่เปิด-ปิด-เปิดซ้ำ
+      stopCameraStream();
+      camera = await openCameraStream();
+      cameraReady = true;
+      mouseMode = false;
+
+      startBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังเตรียมระบบตรวจจับมือ...';
+      await initMediaPipe();
+
+      // ส่งเฟรมแรกเพื่อบังคับให้ MediaPipe โหลด WASM/model ให้ครบก่อนเข้าหน้าเกม
+      try {
+        await hands.send({ image: video });
+      } catch (mpErr) {
+        throw new Error('กล้องเปิดได้แล้ว แต่ระบบตรวจจับมือ MediaPipe เริ่มทำงานไม่สำเร็จ: ' + (mpErr?.message || mpErr));
+      }
+
+      beginGame();
+      setStatus('กล้องพร้อม • ยกฝ่ามือเข้ากล้อง', true);
+      startHandsProcessingLoop();
+    } catch (err) {
+      console.error('Camera start error:', err);
+      stopCameraStream();
+
+      let msg = 'เปิดกล้องไม่สำเร็จ: ' + (err?.message || err);
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        msg = 'เบราว์เซอร์ยังไม่อนุญาตให้หน้าเว็บนี้ใช้กล้อง กรุณากดไอคอนกล้อง/กุญแจข้างแถบที่อยู่ → อนุญาต Camera → โหลดหน้าใหม่แล้วลองอีกครั้ง';
+      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        msg = 'ไม่พบเว็บแคมในเครื่อง กรุณาตรวจว่าสายกล้องเชื่อมต่ออยู่และ Windows มองเห็นกล้อง';
+      } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+        msg = 'กล้องถูกอนุญาตแล้ว แต่เปิดใช้งานไม่ได้ อาจกำลังถูก Zoom, LINE, Teams หรือโปรแกรม Camera ใช้อยู่ กรุณาปิดโปรแกรมที่ใช้กล้องแล้วลองใหม่';
+      } else if (err?.name === 'SecurityError') {
+        msg = 'เบราว์เซอร์บล็อกกล้องด้วยเหตุผลด้านความปลอดภัย แนะนำเปิดเกมผ่าน HTTPS หรือ http://localhost';
+      }
+
+      if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        msg += ' • หน้านี้กำลังเปิดผ่าน HTTP ซึ่งเบราว์เซอร์ส่วนใหญ่ไม่อนุญาตให้ใช้กล้อง';
+      }
+      showStartError(msg);
+    } finally {
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fa-solid fa-camera mr-2"></i> เปิดกล้องและเริ่มภารกิจ';
+    }
+  }
+
+  // ============================================================
+  // 7) CARD SPAWNING / GAME RULES
+  // ============================================================
+  function cardWidthFor(word) {
+    return clamp(CARD_BASE_W + Math.max(0, word.length - 5) * 16, 176, 260);
+  }
+
+  function availableTargetWords() {
+    const alive = new Set(cards.filter(c => c.correct && !c.dead).map(c => c.word));
+    return CATEGORIES[targetCategory].words.filter(w => !destroyedCorrect.has(w) && !alive.has(w));
+  }
+
+  function randomLure() {
+    const otherCats = CATEGORY_NAMES.filter(c => c !== targetCategory);
+    let attempts = 0;
+    while (attempts++ < 30) {
+      const cat = choice(otherCats);
+      const word = choice(CATEGORIES[cat].words);
+      if (!cards.some(c => !c.dead && c.word === word)) return { word, cat };
+    }
+    const cat = choice(otherCats);
+    return { word: choice(CATEGORIES[cat].words), cat };
+  }
+
+  function spawnCard(forceCorrect = null) {
+    if (!targetCategory || victory) return;
+    const need = availableTargetWords();
+    let correct = forceCorrect;
+    if (correct === null) {
+      const correctAlive = cards.filter(c => c.correct && !c.dead).length;
+      correct = need.length > 0 && (correctAlive < 1 || (correctAlive < 2 && Math.random() < .48));
+    }
+
+    let word, category;
+    if (correct && need.length) {
+      word = choice(need); category = targetCategory;
+    } else {
+      const lure = randomLure(); word = lure.word; category = lure.cat; correct = false;
+    }
+
+    const width = cardWidthFor(word);
+    const x = rand(width/2 + 12, Math.max(width/2 + 14, W - width/2 - 12));
+    const y = rand(-210, -70);
+    const speed = rand(24, 43) * (H < 700 ? 1.08 : 1);
+    cards.push({
+      id: `c${++spawnSeq}`,
+      word, category, correct, x, y, width, h: CARD_H,
+      speed,
+      drift: rand(8, 18), driftPhase: rand(0, Math.PI*2),
+      bornAt: performance.now(),
+      dead: false,
+      deathAt: 0,
+      shake: 0,
+      scale: 1
+    });
+  }
+
+  function ensureCards(now) {
+    cards = cards.filter(c => !c.dead || now - c.deathAt < 430);
+    const alive = cards.filter(c => !c.dead);
+    if (alive.length < CARD_TARGET_COUNT && now - lastSpawnAt > 280) {
+      const correctAlive = alive.filter(c => c.correct).length;
+      spawnCard(correctAlive === 0 ? true : null);
+      lastSpawnAt = now;
+    }
+  }
+
+  function resetGameState(newMission = true) {
+    cards = [];
+    particles = [];
+    floatTexts = [];
+    score = 0; combo = 0; maxCombo = 0;
+    destroyedCorrect.clear();
+    currentLockId = null; lockStartedAt = 0; chargeProgress = 0;
+    victory = false;
+    if (newMission || !targetCategory) {
+      const options = CATEGORY_NAMES.filter(c => c !== targetCategory);
+      targetCategory = choice(options.length ? options : CATEGORY_NAMES);
+    }
+    updateHud();
+    for (let i=0; i<4; i++) spawnCard(i < 2);
+  }
+
+  function beginGame() {
+    resetGameState(true);
+    gameRunning = true;
+    paused = false;
+    startModal.classList.add('hidden');
+    victoryModal.classList.add('hidden');
+    victoryModal.classList.remove('flex');
+    hud.classList.remove('hidden');
+    setStatus(mouseMode ? 'โหมดทดลองเมาส์ • เลื่อนไปที่การ์ด' : 'ยกฝ่ามือเข้ากล้อง', mouseMode);
+    ensureAudio();
+  }
+
+  function completeVictory() {
+    victory = true;
+    gameRunning = false;
+    currentLockId = null;
+    stopChargeSound();
+    victoryTitle.textContent = `พิชิต${targetCategory}สำเร็จ!`;
+    finalScore.textContent = score.toLocaleString('th-TH');
+    bestCombo.textContent = maxCombo;
+    victoryModal.classList.remove('hidden');
+    victoryModal.classList.add('flex');
+    soundWin();
+    if (window.confetti) {
+      confetti({ particleCount: 110, spread: 75, origin: { y: .64 }, scalar: 1.05 });
+      setTimeout(() => confetti({ particleCount: 70, angle: 60, spread: 58, origin: { x: 0, y: .65 } }), 220);
+      setTimeout(() => confetti({ particleCount: 70, angle: 120, spread: 58, origin: { x: 1, y: .65 } }), 260);
+    }
+  }
+
+  function blastCard(card) {
+    if (!card || card.dead) return;
+    card.dead = true;
+    card.deathAt = performance.now();
+    card.shake = 1;
+    currentLockId = null;
+    chargeProgress = 0;
+    stopChargeSound();
+
+    if (card.correct) {
+      destroyedCorrect.add(card.word);
+      combo += 1;
+      maxCombo = Math.max(maxCombo, combo);
+      const bonus = 100 + Math.max(0, combo - 1) * 25;
+      score += bonus;
+      burst(card.x, card.y, true);
+      floatText(`+${bonus}  เยี่ยม!`, card.x, card.y - 42, '#86efac');
+      soundCorrect();
+      updateHud();
+      if (destroyedCorrect.size >= 8) {
+        setTimeout(completeVictory, 520);
+      }
+    } else {
+      combo = 0;
+      burst(card.x, card.y, false);
+      floatText('ยังไม่ใช่~', card.x, card.y - 42, '#fda4af');
+      soundWrong();
+      updateHud();
+    }
+  }
+
+  // ============================================================
+  // 8) PARTICLES / FLOATING TEXT
+  // ============================================================
+  function burst(x, y, correct) {
+    const count = correct ? 34 : 24;
+    for (let i=0;i<count;i++) {
+      const a = Math.random()*Math.PI*2;
+      const s = rand(70, 280);
+      particles.push({
+        x,y, vx:Math.cos(a)*s, vy:Math.sin(a)*s,
+        life:rand(.4,.85), maxLife:1,
+        size:rand(2.5,7.5),
+        color: correct ? (Math.random()<.35 ? '#ffffff' : '#00f0ff') : (Math.random()<.25 ? '#ffffff' : '#f43f5e'),
+        star: Math.random() < .4
+      });
+    }
+  }
+
+  function floatText(text, x, y, color) {
+    floatTexts.push({ text, x, y, color, life: 1, vy: -44 });
+  }
+
+  function updateFx(dt) {
+    for (const p of particles) {
+      p.x += p.vx*dt; p.y += p.vy*dt;
+      p.vx *= Math.pow(.04, dt); p.vy = p.vy*Math.pow(.08,dt) + 85*dt;
+      p.life -= dt*1.5;
+    }
+    particles = particles.filter(p => p.life > 0);
+    for (const f of floatTexts) { f.y += f.vy*dt; f.life -= dt*.85; }
+    floatTexts = floatTexts.filter(f => f.life > 0);
+  }
+
+  function drawStar(x,y,r,color,alpha=1) {
+    ctx.save(); ctx.translate(x,y); ctx.rotate(performance.now()/600);
+    ctx.fillStyle = color; ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    for(let i=0;i<10;i++) {
+      const rr = i%2===0 ? r : r*.42;
+      const a = -Math.PI/2 + i*Math.PI/5;
+      const px=Math.cos(a)*rr, py=Math.sin(a)*rr;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+
+  function drawFx() {
+    for (const p of particles) {
+      if (p.star) drawStar(p.x,p.y,p.size,p.color,clamp(p.life,0,1));
+      else { ctx.save(); ctx.globalAlpha=clamp(p.life,0,1); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    }
+    for (const f of floatTexts) {
+      ctx.save();
+      ctx.globalAlpha = clamp(f.life,0,1);
+      ctx.font = `800 ${clamp(W/40, 20, 30)}px Kanit`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.lineWidth=5; ctx.strokeStyle='rgba(2,6,23,.75)'; ctx.strokeText(f.text,f.x,f.y);
+      ctx.fillStyle=f.color; ctx.fillText(f.text,f.x,f.y);
+      ctx.restore();
+    }
+  }
+
+  // ============================================================
+  // 9) DRAW CAMERA + BACKGROUND
+  // ============================================================
+  function drawCameraBackground(now) {
+    ctx.save();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.fillStyle = '#07111f'; ctx.fillRect(0,0,W,H);
+
+    if (cameraReady && !mouseMode && video.readyState >= 2) {
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      const scale = Math.max(W/vw, H/vh);
+      const dw = vw*scale, dh = vh*scale;
+      const dx=(W-dw)/2, dy=(H-dh)/2;
+      ctx.save();
+      ctx.translate(W,0); ctx.scale(-1,1);
+      ctx.drawImage(video, W-(dx+dw), dy, dw, dh);
+      ctx.restore();
+
+      // readability tint
+      const g=ctx.createLinearGradient(0,0,0,H);
+      g.addColorStop(0,'rgba(2,6,23,.30)');
+      g.addColorStop(.45,'rgba(2,6,23,.08)');
+      g.addColorStop(1,'rgba(2,6,23,.30)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    } else {
+      const g=ctx.createRadialGradient(W/2,H*.42,30,W/2,H*.42,Math.max(W,H)*.72);
+      g.addColorStop(0,'#123047'); g.addColorStop(.5,'#071827'); g.addColorStop(1,'#020617');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+      // faint ninja speed lines
+      ctx.save(); ctx.translate(W/2,H/2); ctx.globalAlpha=.08;
+      ctx.strokeStyle='#67e8f9'; ctx.lineWidth=1;
+      for(let i=0;i<36;i++) {
+        const a=(i/36)*Math.PI*2 + now/14000;
+        const r1=110, r2=Math.max(W,H)*.8;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1); ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // ============================================================
+  // 10) DRAW CARDS — 3D PASTEL CLAY, SAME DESIGN FOR ALL
+  // ============================================================
+  function drawCard(card, now, isLocked=false, lockP=0) {
+    const age = (now-card.bornAt)/1000;
+    const enter = clamp(age/.3,0,1);
+    const deadP = card.dead ? clamp((now-card.deathAt)/360,0,1) : 0;
+    const scale = enter * (1 - deadP*.75);
+    const alpha = 1-deadP;
+    const shakeX = card.dead ? Math.sin((now-card.deathAt)*.18)*9*(1-deadP) : 0;
+    const x=card.x+shakeX, y=card.y;
+    const w=card.width, h=card.h;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x,y);
+    ctx.scale(scale,scale);
+
+    // outer soft shadow
+    ctx.shadowColor='rgba(2,6,23,.45)'; ctx.shadowBlur=26; ctx.shadowOffsetY=11;
+    const bodyGrad=ctx.createLinearGradient(-w/2,-h/2,w/2,h/2);
+    bodyGrad.addColorStop(0,'#ffffff');
+    bodyGrad.addColorStop(.5,'#f8fafc');
+    bodyGrad.addColorStop(1,'#e8eef5');
+    roundedRectPath(ctx,-w/2,-h/2,w,h,25);
+    ctx.fillStyle=bodyGrad; ctx.fill();
+
+    // clay rim
+    ctx.shadowColor='transparent';
+    ctx.lineWidth=2.2; ctx.strokeStyle='rgba(255,255,255,.78)'; ctx.stroke();
+    ctx.beginPath();
+    roundedRectPath(ctx,-w/2+5,-h/2+5,w-10,h-10,21);
+    ctx.strokeStyle='rgba(148,163,184,.16)'; ctx.lineWidth=2; ctx.stroke();
+
+    // top highlight
+    const hi=ctx.createLinearGradient(0,-h/2,0,0);
+    hi.addColorStop(0,'rgba(255,255,255,.8)'); hi.addColorStop(1,'rgba(255,255,255,0)');
+    roundedRectPath(ctx,-w/2+8,-h/2+7,w-16,h*.42,18);
+    ctx.fillStyle=hi; ctx.fill();
+
+    // word
+    const fontSize = card.word.length >= 8 ? 26 : card.word.length >= 6 ? 29 : 34;
+    ctx.font=`800 ${fontSize}px Kanit`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#0f172a';
+    ctx.shadowColor='rgba(255,255,255,.9)'; ctx.shadowBlur=1; ctx.shadowOffsetY=1;
+    ctx.fillText(card.word,0,2);
+    ctx.restore();
+
+    if (isLocked && !card.dead) drawReticle(card.x,card.y,card.width,card.h,lockP,now);
+  }
+
+  function drawReticle(x,y,w,h,p,now) {
+    const r=Math.max(w,h)*.57 + 18;
+    ctx.save(); ctx.translate(x,y);
+    ctx.rotate(now/420);
+    ctx.lineWidth=3;
+    ctx.setLineDash([10,8]);
+    ctx.strokeStyle='rgba(250,204,21,.9)';
+    ctx.shadowColor='#facc15'; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.rotate(-now/210);
+    ctx.strokeStyle='rgba(0,240,255,.75)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,0,r+8,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+
+    // circular progress arc
+    ctx.save();
+    ctx.lineCap='round'; ctx.lineWidth=7;
+    ctx.strokeStyle='#facc15'; ctx.shadowColor='#facc15'; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(x,y,r+14,-Math.PI/2,-Math.PI/2+Math.PI*2*p); ctx.stroke();
+    ctx.restore();
+
+    ctx.save(); ctx.textAlign='center'; ctx.font='800 13px Kanit'; ctx.fillStyle='#fef08a';
+    ctx.strokeStyle='rgba(2,6,23,.7)'; ctx.lineWidth=4;
+    const label = p < .05 ? 'ล็อกเป้า!' : `ชาร์จ ${Math.round(p*100)}%`;
+    ctx.strokeText(label,x,y-h/2-28); ctx.fillText(label,x,y-h/2-28); ctx.restore();
+  }
+
+  // ============================================================
+  // 11) HAND SKELETON + RASENGAN
+  // ============================================================
+  const HAND_EDGES = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],[0,17]
+  ];
+
+  function drawHandSkeleton(lm) {
+    if (!lm) return;
+    ctx.save();
+    ctx.strokeStyle='rgba(0,240,255,.72)'; ctx.lineWidth=3;
+    ctx.shadowColor='#00f0ff'; ctx.shadowBlur=14;
+    ctx.beginPath();
+    for(const [a,b] of HAND_EDGES) { ctx.moveTo(lm[a].x,lm[a].y); ctx.lineTo(lm[b].x,lm[b].y); }
+    ctx.stroke();
+    for(let i=0;i<lm.length;i++) {
+      ctx.beginPath(); ctx.arc(lm[i].x,lm[i].y,i===0?5:3.5,0,Math.PI*2);
+      ctx.fillStyle=i===0?'#ecfeff':'#67e8f9'; ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawRasengan(palm, now, charge=0) {
+    if (!palm) return;
+    const pulse = 1 + Math.sin(now*.009)*.08;
+    const r = (SPHERE_RADIUS + charge*10) * pulse;
+    ctx.save(); ctx.translate(palm.x,palm.y);
+
+    // aura
+    const aura=ctx.createRadialGradient(0,0,5,0,0,r*1.75);
+    aura.addColorStop(0,'rgba(255,255,255,.95)');
+    aura.addColorStop(.17,'rgba(103,232,249,.72)');
+    aura.addColorStop(.55,'rgba(0,240,255,.20)');
+    aura.addColorStop(1,'rgba(0,240,255,0)');
+    ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(0,0,r*1.75,0,Math.PI*2); ctx.fill();
+
+    // core
+    const core=ctx.createRadialGradient(-r*.18,-r*.22,2,0,0,r);
+    core.addColorStop(0,'#ffffff'); core.addColorStop(.22,'#cffafe'); core.addColorStop(.58,'#22d3ee'); core.addColorStop(1,'rgba(8,145,178,.18)');
+    ctx.fillStyle=core; ctx.shadowColor='#00f0ff'; ctx.shadowBlur=28;
+    ctx.beginPath(); ctx.arc(0,0,r*.76,0,Math.PI*2); ctx.fill();
+
+    // 3 rotating storm rings
+    ctx.shadowBlur=14; ctx.lineWidth=3; ctx.lineCap='round';
+    for(let k=0;k<3;k++) {
+      ctx.save(); ctx.rotate((k%2?1:-1)*now*(.0022+k*.00065)+k*1.9);
+      ctx.strokeStyle = k===1 ? 'rgba(255,255,255,.82)' : 'rgba(103,232,249,.88)';
+      ctx.beginPath();
+      ctx.ellipse(0,0,r*(.94-k*.10),r*(.38+k*.07),k*.42,.25,Math.PI*1.72);
+      ctx.stroke(); ctx.restore();
+    }
+
+    // random lightning
+    ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1.5;
+    for(let i=0;i<4;i++) {
+      const a = Math.random()*Math.PI*2;
+      const r0=r*.34, r1=r*1.10;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*r0,Math.sin(a)*r0);
+      const mx=Math.cos(a+.15)*(r*.72)+rand(-5,5), my=Math.sin(a+.15)*(r*.72)+rand(-5,5);
+      ctx.lineTo(mx,my); ctx.lineTo(Math.cos(a)*r1,Math.sin(a)*r1); ctx.stroke();
+    }
+
+    // center swirl
+    ctx.fillStyle='rgba(255,255,255,.8)';
+    ctx.beginPath(); ctx.arc(0,0,8+charge*5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // ============================================================
+  // 12) COLLISION / LOCK-ON
+  // ============================================================
+  function activeEnergyPoint() {
+    if (mouseMode) return mouse.active ? {x:mouse.x,y:mouse.y} : null;
+    if (handState.visible && handState.open) return handState.palm;
+    return null;
+  }
+
+  function nearestCollidingCard(point) {
+    if (!point) return null;
+    let best=null, bestD=Infinity;
+    for(const c of cards) {
+      if(c.dead) continue;
+      const dx=Math.max(Math.abs(point.x-c.x)-c.width/2,0);
+      const dy=Math.max(Math.abs(point.y-c.y)-c.h/2,0);
+      const d=Math.hypot(dx,dy);
+      if(d < SPHERE_RADIUS + 40 && d < bestD) { best=c; bestD=d; }
+    }
+    return best;
+  }
+
+  function updateLock(now) {
+    if (!gameRunning || paused || victory) { resetLock(); return; }
+    const point=activeEnergyPoint();
+    const card=nearestCollidingCard(point);
+    if(!card) { resetLock(); return; }
+
+    if(currentLockId !== card.id) {
+      currentLockId=card.id; lockStartedAt=now; chargeProgress=0;
+      startChargeSound();
+    } else {
+      chargeProgress=clamp((now-lockStartedAt)/LOCK_MS,0,1);
+      updateChargeSound(chargeProgress);
+      if(chargeProgress>=1) blastCard(card);
+    }
+  }
+
+  function resetLock() {
+    if(currentLockId) stopChargeSound();
+    currentLockId=null; lockStartedAt=0; chargeProgress=0;
+  }
+
+  // ============================================================
+  // 13) UPDATE / RENDER LOOP
+  // ============================================================
+  function updateCards(dt, now) {
+    if (!gameRunning || paused || victory) return;
+    for(const c of cards) {
+      if(c.dead) continue;
+      c.y += c.speed*dt;
+      c.x += Math.sin(now*.0007+c.driftPhase)*c.drift*dt;
+      c.x = clamp(c.x, c.width/2+8, W-c.width/2-8);
+      if(c.y - c.h/2 > H+60) {
+        c.dead=true; c.deathAt=now-500;
+        // เด็กไม่ถูกหักคะแนนหากปล่อยผ่าน
+      }
+    }
+    ensureCards(now);
+  }
+
+  function drawScene(now) {
+    drawCameraBackground(now);
+
+    // Cards behind the hand/energy
+    for(const c of cards) {
+      drawCard(c, now, c.id===currentLockId, c.id===currentLockId?chargeProgress:0);
+    }
+
+    if (!mouseMode && handState.visible) drawHandSkeleton(handState.landmarks);
+    const energy=activeEnergyPoint();
+    if(energy) drawRasengan(energy,now,chargeProgress);
+
+    drawFx();
+
+    if (!gameRunning && !victory && startModal.classList.contains('hidden')) {
+      ctx.save(); ctx.fillStyle='rgba(2,6,23,.45)'; ctx.fillRect(0,0,W,H); ctx.restore();
+    }
+  }
+
+  function frame(now) {
+    const dt=clamp((now-lastFrame)/1000,0,.05); lastFrame=now;
+    if(!paused) {
+      updateCards(dt,now);
+      updateFx(dt);
+      updateLock(now);
+    }
+    drawScene(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ============================================================
+  // 14) CONTROLS
+  // ============================================================
+  startBtn.addEventListener('click', startCamera);
+
+  mouseDemoBtn.addEventListener('click', () => {
+    clearStartError();
+    mouseMode=true;
+    stopCameraStream();
+    beginGame();
+  });
+
+  function showPause() {
+    if(!gameRunning || victory) return;
+    paused=true; resetLock();
+    pauseModal.classList.remove('hidden'); pauseModal.classList.add('flex');
+  }
+  function hidePause() {
+    paused=false;
+    pauseModal.classList.add('hidden'); pauseModal.classList.remove('flex');
+    lastFrame=performance.now();
+  }
+  pauseBtn.addEventListener('click', showPause);
+  resumeBtn.addEventListener('click', hidePause);
+
+  restartFromPauseBtn.addEventListener('click', () => {
+    resetGameState(true); hidePause();
+  });
+
+  playAgainBtn.addEventListener('click', () => {
+    victoryModal.classList.add('hidden'); victoryModal.classList.remove('flex');
+    resetGameState(true); gameRunning=true; paused=false; victory=false;
+    setStatus(mouseMode ? 'โหมดทดลองเมาส์ • เลื่อนไปที่การ์ด' : 'ยกฝ่ามือเข้ากล้อง', mouseMode);
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    const rect=canvas.getBoundingClientRect();
+    mouse.x=e.clientX-rect.left; mouse.y=e.clientY-rect.top;
+    if(mouseMode) mouse.active=true;
+  });
+  canvas.addEventListener('pointerenter', () => { if(mouseMode) mouse.active=true; });
+  canvas.addEventListener('pointerleave', () => { if(mouseMode) { mouse.active=false; resetLock(); } });
+  canvas.addEventListener('pointerdown', () => { if(mouseMode) mouse.active=true; });
+
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden && gameRunning && !paused) showPause();
+  });
+
+  // Prevent accidental scroll/zoom gestures on game canvas
+  canvas.addEventListener('touchmove', e => e.preventDefault(), {passive:false});
+
+  // Initial decorative frame
+  updateHud();
+})();
+</script>
+</body>
+</html>
